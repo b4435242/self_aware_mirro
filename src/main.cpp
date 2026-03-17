@@ -5,13 +5,31 @@
 // ===========================
 // Select camera model in board_config.h
 // ===========================
-#include "board_config.h"
+//#include "board_config.h"
+#define CAMERA_MODEL_CUSTOM
+#define PWDN_GPIO_NUM     -1
+#define RESET_GPIO_NUM    -1
+#define XCLK_GPIO_NUM     15
+#define SIOD_GPIO_NUM      4
+#define SIOC_GPIO_NUM      5
+
+#define Y9_GPIO_NUM       16
+#define Y8_GPIO_NUM       17
+#define Y7_GPIO_NUM       18
+#define Y6_GPIO_NUM       12
+#define Y5_GPIO_NUM       10
+#define Y4_GPIO_NUM        8
+#define Y3_GPIO_NUM        9
+#define Y2_GPIO_NUM       11
+#define VSYNC_GPIO_NUM     6
+#define HREF_GPIO_NUM      7
+#define PCLK_GPIO_NUM     13
 
 // ===========================
 // Enter your WiFi credentials
 // ===========================
-const char *ssid = "**********";
-const char *password = "**********";
+const char *ssid = "10135_2.4G";
+const char *password = "10110135@6f";
 
 void startCameraServer();
 void setupLedFlash();
@@ -117,7 +135,8 @@ void setup() {
   }
   Serial.println("");
   Serial.println("WiFi connected");
-
+  Serial.printf("PSRAM 大小: %d bytes\n", ESP.getPsramSize());
+  
   startCameraServer();
 
   Serial.print("Camera Ready! Use 'http://");

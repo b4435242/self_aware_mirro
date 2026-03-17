@@ -841,7 +841,7 @@ void startCameraServer() {
 
 void setupLedFlash() {
 #if defined(LED_GPIO_NUM)
-  ledcAttach(LED_GPIO_NUM, 5000, 8);
+  //ledcAttach(LED_GPIO_NUM, 5000, 8);
 #else
   log_i("LED flash is disabled -> LED_GPIO_NUM undefined");
 #endif

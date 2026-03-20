@@ -40,6 +40,13 @@ GxEPD2_3C<GxEPD2_213_Z19c, GxEPD2_213_Z19c::HEIGHT> display(GxEPD2_213_Z19c(EPD_
 #define PCLK_GPIO_NUM     13
 
 // ==========================================
+// 3. 按鈕定義 (使用外部按鈕模組與模擬電源)
+// ==========================================
+const int BUTTON_PIN = 3;   // 訊號輸出腳
+const int FAKE_VCC   = 41;  // 模擬 VCC 腳
+const int FAKE_GND   = 45;  // 模擬 GND 腳
+
+// ==========================================
 // 圖片處理全域變數 (放在 PSRAM)
 // ==========================================
 uint8_t *processed_image_bw = NULL; // 儲存處理好的 212x104 灰階資料
@@ -185,6 +192,20 @@ void capture_process_display() {
 void setup() {
     Serial.begin(115200);
     delay(1000);
+
+    // --- 【硬體駭客技巧：設定模擬電源】 ---
+    // 1. 設定 FAKE_VCC 為輸出，並拉高到 3.3V
+    pinMode(FAKE_VCC, OUTPUT);
+    digitalWrite(FAKE_VCC, HIGH);
+    
+    // 2. 設定 FAKE_GND 為輸出，並拉低到 0V (接地)
+    pinMode(FAKE_GND, OUTPUT);
+    digitalWrite(FAKE_GND, LOW);
+    
+    // 3. 設定按鈕訊號腳 (模組自帶電阻，設為 INPUT 即可)
+    pinMode(BUTTON_PIN, INPUT);
+    Serial.println("\n--- ESP32-S3 Camera Button Trigger ---");
+    
     Serial.println("\n--- ESP32-S3 Cam to E-Paper ---");
 
     // 檢查有沒有偵測到 PSRAM (關鍵！)
@@ -214,7 +235,24 @@ void setup() {
 }
 
 void loop() {
-    // 這裡是空的，避免電子紙一直刷新
-    // 如果想要定時拍照，可以寫在這裡，並加上長 delay
-    delay(10000);
+    // 偵測按鈕是否被按下 (模組按下通常輸出 HIGH)
+    if (digitalRead(BUTTON_PIN) == HIGH) {
+        delay(50); // 消除硬體按鈕彈跳 (Debounce)
+        
+        // 再次確認按鈕是否真的被按下
+        if (digitalRead(BUTTON_PIN) == HIGH) {
+            Serial.println("External Button Pressed! Snap!");
+            
+            // 執行拍照與刷新畫面
+            capture_process_display();
+            
+            // 等待直到手指鬆開按鈕，避免連續觸發
+            while (digitalRead(BUTTON_PIN) == HIGH) {
+                delay(10);
+            }
+        }
+    }
+    
+    // 稍微延遲避免 CPU 滿載
+    delay(10);
 }

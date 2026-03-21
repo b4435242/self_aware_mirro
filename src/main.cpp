@@ -2,10 +2,10 @@
 #include <SPI.h>
 #include "esp_camera.h"
 #include <GxEPD2_3C.h>
+#include <WiFiManager.h>
+#include <time.h>
 #include "FS.h"
 #include "SD_MMC.h"
-
-int picture_count = 0; // 用於照片流水號命名
 
 // ==========================================
 // 1. 硬體定義：電子紙安全腳位 (Z19c 三色)
@@ -114,22 +114,28 @@ void capture_process_display() {
     int crop_x = (src_w - EPD_WIDTH) / 2;
     int crop_y = (src_h - EPD_HEIGHT) / 2;
 
-    // --- 【新增：將原始灰階照片存入 SD 卡】 ---
+    // --- 【修改：使用 yyyy-mm-dd 作為檔名】 ---
     if (SD_MMC.cardType() != CARD_NONE) {
-        String path = "/pic_" + String(picture_count++) + ".pgm";
-        File file = SD_MMC.open(path.c_str(), FILE_WRITE);
+        time_t now;
+        struct tm timeinfo;
+        time(&now);
+        localtime_r(&now, &timeinfo); // 將 Unix 時間轉為本地時間結構
+        
+        char fileName[32];
+        // 格式化為 /YYYY-MM-DD.pgm (例如 /2026-03-21.pgm)
+        strftime(fileName, sizeof(fileName), "/%Y-%m-%d.pgm", &timeinfo);
+        
+        File file = SD_MMC.open(fileName, FILE_WRITE);
         if (file) {
-            // 寫入 PGM 圖片標準標頭，讓 Mac/PC 能直接預覽
             file.printf("P5\n%d %d\n255\n", fb->width, fb->height);
-            // 寫入灰階像素資料
             file.write(fb->buf, fb->len);
             file.close();
-            Serial.printf("Saved to SD: %s\n", path.c_str());
+            Serial.printf("Saved to SD: %s\n", fileName);
         } else {
             Serial.println("Failed to save to SD!");
         }
     }
-    // ----------------------------------------
+    // --------------------------------------
 
     for (int y = 0; y < EPD_HEIGHT; y++) {
         for (int x = 0; x < EPD_WIDTH; x++) {
@@ -236,6 +242,28 @@ void setup() {
     }
     // ----------------------------------------
     
+    // --- 【新增：WiFiManager 與 NTP 對時】 ---
+    Serial.println("Starting WiFiManager...");
+    WiFiManager wifiManager;
+    // 如果找不到舊 WiFi，會發射一個 "Self_Aware_Mirror" 的 AP 讓你用手機連線設定
+    wifiManager.autoConnect("Self_Aware_Mirror"); 
+    Serial.println("WiFi Connected!");
+
+    // 設定 NTP 伺服器 (UTC+8 台灣時間 = 8 * 3600 秒)
+    configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+    Serial.print("Syncing time...");
+    struct tm timeinfo;
+    // 等待直到成功取得時間
+    while (!getLocalTime(&timeinfo, 5000)) {
+        Serial.print(".");
+    }
+    Serial.println("\nTime Synced!");
+
+    // 【關鍵】：對時完成後立刻關閉 WiFi，避免發熱影響相機畫質與浪費電
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    // --------------------------------------
+
     Serial.println("\n--- ESP32-S3 Cam to E-Paper ---");
 
     // 檢查有沒有偵測到 PSRAM (關鍵！)

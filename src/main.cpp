@@ -15,9 +15,9 @@ const int EPD_SCK  = 21;
 
 GxEPD2_3C<GxEPD2_213_Z19c, GxEPD2_213_Z19c::HEIGHT> display(GxEPD2_213_Z19c(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
 
-// 電子紙目標尺寸 (橫向)
-#define EPD_WIDTH  212
-#define EPD_HEIGHT 104
+// 電子紙目標尺寸 (改為直向)
+#define EPD_WIDTH  104
+#define EPD_HEIGHT 212
 
 // ==========================================
 // 2. 硬體定義：Goouuu ESP32-S3-CAM 相機腳位
@@ -228,7 +228,7 @@ void setup() {
     // 初始化電子紙
     SPI.begin(EPD_SCK, -1, EPD_MOSI, EPD_CS);
     display.init(115200, true, 2, false);
-    display.setRotation(1); // 橫向
+    display.setRotation(0); // 0 或 2 是直立顯示
 
     // 執行第一次拍照顯示
     capture_process_display();

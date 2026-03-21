@@ -2,6 +2,10 @@
 #include <SPI.h>
 #include "esp_camera.h"
 #include <GxEPD2_3C.h>
+#include "FS.h"
+#include "SD_MMC.h"
+
+int picture_count = 0; // 用於照片流水號命名
 
 // ==========================================
 // 1. 硬體定義：電子紙安全腳位 (Z19c 三色)
@@ -110,6 +114,23 @@ void capture_process_display() {
     int crop_x = (src_w - EPD_WIDTH) / 2;
     int crop_y = (src_h - EPD_HEIGHT) / 2;
 
+    // --- 【新增：將原始灰階照片存入 SD 卡】 ---
+    if (SD_MMC.cardType() != CARD_NONE) {
+        String path = "/pic_" + String(picture_count++) + ".pgm";
+        File file = SD_MMC.open(path.c_str(), FILE_WRITE);
+        if (file) {
+            // 寫入 PGM 圖片標準標頭，讓 Mac/PC 能直接預覽
+            file.printf("P5\n%d %d\n255\n", fb->width, fb->height);
+            // 寫入灰階像素資料
+            file.write(fb->buf, fb->len);
+            file.close();
+            Serial.printf("Saved to SD: %s\n", path.c_str());
+        } else {
+            Serial.println("Failed to save to SD!");
+        }
+    }
+    // ----------------------------------------
+
     for (int y = 0; y < EPD_HEIGHT; y++) {
         for (int x = 0; x < EPD_WIDTH; x++) {
             // 獲取相應的原始相機像素位置
@@ -205,6 +226,15 @@ void setup() {
     // 3. 設定按鈕訊號腳 (模組自帶電阻，設為 INPUT 即可)
     pinMode(BUTTON_PIN, INPUT);
     Serial.println("\n--- ESP32-S3 Camera Button Trigger ---");
+
+    // --- 【新增：初始化 SD 卡 (1-bit 模式)】 ---
+    SD_MMC.setPins(39, 38, 40); // CLK, CMD, D0
+    if (!SD_MMC.begin("/sdcard", true)) {
+        Serial.println("⚠️ SD Card Mount Failed!");
+    } else {
+        Serial.println("SD Card Mount SUCCESS!");
+    }
+    // ----------------------------------------
     
     Serial.println("\n--- ESP32-S3 Cam to E-Paper ---");
 

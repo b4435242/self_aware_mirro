@@ -6,6 +6,9 @@
 #include <time.h>
 #include "FS.h"
 #include "SD_MMC.h"
+#include <HWCDC.h>
+
+HWCDC USBSerial;
 
 // ==========================================
 // 1. 硬體定義：電子紙安全腳位 (Z19c 三色)
@@ -219,98 +222,10 @@ void capture_process_display() {
 void setup() {
     Serial.begin(115200);
     delay(1000);
-
-    // --- 【硬體駭客技巧：設定模擬電源】 ---
-    // 1. 設定 FAKE_VCC 為輸出，並拉高到 3.3V
-    pinMode(FAKE_VCC, OUTPUT);
-    digitalWrite(FAKE_VCC, HIGH);
-    
-    // 2. 設定 FAKE_GND 為輸出，並拉低到 0V (接地)
-    pinMode(FAKE_GND, OUTPUT);
-    digitalWrite(FAKE_GND, LOW);
-    
-    // 3. 設定按鈕訊號腳 (模組自帶電阻，設為 INPUT 即可)
-    pinMode(BUTTON_PIN, INPUT);
-    Serial.println("\n--- ESP32-S3 Camera Button Trigger ---");
-
-    // --- 【新增：初始化 SD 卡 (1-bit 模式)】 ---
-    SD_MMC.setPins(39, 38, 40); // CLK, CMD, D0
-    if (!SD_MMC.begin("/sdcard", true)) {
-        Serial.println("⚠️ SD Card Mount Failed!");
-    } else {
-        Serial.println("SD Card Mount SUCCESS!");
-    }
-    // ----------------------------------------
-    
-    // --- 【新增：WiFiManager 與 NTP 對時】 ---
-    Serial.println("Starting WiFiManager...");
-    WiFiManager wifiManager;
-    // 如果找不到舊 WiFi，會發射一個 "Self_Aware_Mirror" 的 AP 讓你用手機連線設定
-    wifiManager.autoConnect("Self_Aware_Mirror"); 
-    Serial.println("WiFi Connected!");
-
-    // 設定 NTP 伺服器 (UTC+8 台灣時間 = 8 * 3600 秒)
-    configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
-    Serial.print("Syncing time...");
-    struct tm timeinfo;
-    // 等待直到成功取得時間
-    while (!getLocalTime(&timeinfo, 5000)) {
-        Serial.print(".");
-    }
-    Serial.println("\nTime Synced!");
-
-    // 【關鍵】：對時完成後立刻關閉 WiFi，避免發熱影響相機畫質與浪費電
-    WiFi.disconnect(true);
-    WiFi.mode(WIFI_OFF);
-    // --------------------------------------
-
-    Serial.println("\n--- ESP32-S3 Cam to E-Paper ---");
-
-    // 檢查有沒有偵測到 PSRAM (關鍵！)
-    if (!psramFound()) {
-        Serial.println("⚠️ Error: PSRAM not found! Need build_flags in platformio.ini");
-        while (1) delay(100);
-    }
-    Serial.printf("PSRAM size: %d MB\n", ESP.getPsramSize() / 1024 / 1024);
-
-    // 在 PSRAM 分配緩衝區 (212 * 104 bytes)
-    processed_image_bw = (uint8_t *)ps_malloc(EPD_WIDTH * EPD_HEIGHT);
-    if (!processed_image_bw) {
-        Serial.println("Failed to allocate image buffer in PSRAM");
-        while (1) delay(100);
-    }
-
-    // 初始化相機
-    if (init_camera() != ESP_OK) while (1) delay(100);
-
-    // 初始化電子紙
-    SPI.begin(EPD_SCK, -1, EPD_MOSI, EPD_CS);
-    display.init(115200, true, 2, false);
-    display.setRotation(0); // 0 或 2 是直立顯示
-
-    // 執行第一次拍照顯示
-    capture_process_display();
+    log_i("\n--- Hello ---");
 }
 
 void loop() {
-    // 偵測按鈕是否被按下 (模組按下通常輸出 HIGH)
-    if (digitalRead(BUTTON_PIN) == HIGH) {
-        delay(50); // 消除硬體按鈕彈跳 (Debounce)
-        
-        // 再次確認按鈕是否真的被按下
-        if (digitalRead(BUTTON_PIN) == HIGH) {
-            Serial.println("External Button Pressed! Snap!");
-            
-            // 執行拍照與刷新畫面
-            capture_process_display();
-            
-            // 等待直到手指鬆開按鈕，避免連續觸發
-            while (digitalRead(BUTTON_PIN) == HIGH) {
-                delay(10);
-            }
-        }
-    }
-    
-    // 稍微延遲避免 CPU 滿載
-    delay(10);
+    log_i("\n--- Hi ---");
+    delay(1000);
 }

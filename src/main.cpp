@@ -5,10 +5,16 @@
 #include <WiFiManager.h>
 #include <time.h>
 #include "FS.h"
-#include "SD_MMC.h"
+#include "SD.h"
 #include <HWCDC.h>
+#include "sd_manager.h"
 
 HWCDC USBSerial;
+
+#define SPI_SCK  5   // Shared SCK
+#define SPI_MOSI 6   // Shared MOSI
+#define TF_MISO  4   // SD Card MISO
+#define TF_CS    7   // SD Card CS
 
 // ==========================================
 // 1. 硬體定義：電子紙安全腳位 (Z19c 三色)
@@ -117,28 +123,6 @@ void capture_process_display() {
     int crop_x = (src_w - EPD_WIDTH) / 2;
     int crop_y = (src_h - EPD_HEIGHT) / 2;
 
-    // --- 【修改：使用 yyyy-mm-dd 作為檔名】 ---
-    if (SD_MMC.cardType() != CARD_NONE) {
-        time_t now;
-        struct tm timeinfo;
-        time(&now);
-        localtime_r(&now, &timeinfo); // 將 Unix 時間轉為本地時間結構
-        
-        char fileName[32];
-        // 格式化為 /YYYY-MM-DD.pgm (例如 /2026-03-21.pgm)
-        strftime(fileName, sizeof(fileName), "/%Y-%m-%d.pgm", &timeinfo);
-        
-        File file = SD_MMC.open(fileName, FILE_WRITE);
-        if (file) {
-            file.printf("P5\n%d %d\n255\n", fb->width, fb->height);
-            file.write(fb->buf, fb->len);
-            file.close();
-            Serial.printf("Saved to SD: %s\n", fileName);
-        } else {
-            Serial.println("Failed to save to SD!");
-        }
-    }
-    // --------------------------------------
 
     for (int y = 0; y < EPD_HEIGHT; y++) {
         for (int x = 0; x < EPD_WIDTH; x++) {
@@ -222,10 +206,26 @@ void capture_process_display() {
 void setup() {
     Serial.begin(115200);
     delay(1000);
-    log_i("\n--- Hello ---");
+
+    // Call the modular init function
+    if (sd_init(SPI_SCK, TF_MISO, SPI_MOSI, TF_CS)) {
+        
+        // Print info and run read/write test if initialization succeeded
+        printSDCardInfo();
+        
+        const char* testFilePath = "/boot_log.txt";
+        const char* testMessage = "System successfully mounted SD via standard SPI.\n";
+
+        // Note: We now pass the standard 'SD' object, not SD_MMC
+        writeToFile(SD, testFilePath, testMessage);
+        readFromFile(SD, testFilePath);
+        
+    } else {
+        log_e("Critical Error: SD subsystem failed to initialize.");
+    }
+
 }
 
 void loop() {
-    log_i("\n--- Hi ---");
     delay(1000);
 }

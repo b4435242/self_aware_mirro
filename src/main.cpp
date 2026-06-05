@@ -8,6 +8,7 @@
 #include "SD.h"
 #include <HWCDC.h>
 #include "sd_manager.h"
+#include "camera_manager.h"
 
 HWCDC USBSerial;
 
@@ -32,25 +33,6 @@ GxEPD2_3C<GxEPD2_213_Z19c, GxEPD2_213_Z19c::HEIGHT> display(GxEPD2_213_Z19c(EPD_
 #define EPD_WIDTH  104
 #define EPD_HEIGHT 212
 
-// ==========================================
-// 2. 硬體定義：Goouuu ESP32-S3-CAM 相機腳位
-// ==========================================
-#define PWDN_GPIO_NUM     -1
-#define RESET_GPIO_NUM    -1
-#define XCLK_GPIO_NUM     15
-#define SIOD_GPIO_NUM     4
-#define SIOC_GPIO_NUM     5
-#define Y9_GPIO_NUM       16
-#define Y8_GPIO_NUM       17
-#define Y7_GPIO_NUM       18
-#define Y6_GPIO_NUM       12
-#define Y5_GPIO_NUM       10
-#define Y4_GPIO_NUM       8
-#define Y3_GPIO_NUM       9
-#define Y2_GPIO_NUM       11
-#define VSYNC_GPIO_NUM    6
-#define href_GPIO_NUM     7
-#define PCLK_GPIO_NUM     13
 
 // ==========================================
 // 3. 按鈕定義 (使用外部按鈕模組與模擬電源)
@@ -64,43 +46,6 @@ const int FAKE_GND   = 45;  // 模擬 GND 腳
 // ==========================================
 uint8_t *processed_image_bw = NULL; // 儲存處理好的 212x104 灰階資料
 
-// 初始化相機
-esp_err_t init_camera() {
-    camera_config_t config;
-    config.ledc_channel = LEDC_CHANNEL_0;
-    config.ledc_timer = LEDC_TIMER_0;
-    config.pin_d0 = Y2_GPIO_NUM;
-    config.pin_d1 = Y3_GPIO_NUM;
-    config.pin_d2 = Y4_GPIO_NUM;
-    config.pin_d3 = Y5_GPIO_NUM;
-    config.pin_d4 = Y6_GPIO_NUM;
-    config.pin_d5 = Y7_GPIO_NUM;
-    config.pin_d6 = Y8_GPIO_NUM;
-    config.pin_d7 = Y9_GPIO_NUM;
-    config.pin_xclk = XCLK_GPIO_NUM;
-    config.pin_pclk = PCLK_GPIO_NUM;
-    config.pin_vsync = VSYNC_GPIO_NUM;
-    config.pin_href = href_GPIO_NUM;
-    config.pin_sccb_sda = SIOD_GPIO_NUM;
-    config.pin_sccb_scl = SIOC_GPIO_NUM;
-    config.pin_pwdn = PWDN_GPIO_NUM;
-    config.pin_reset = RESET_GPIO_NUM;
-    config.xclk_freq_hz = 20000000;
-    config.frame_size = FRAMESIZE_QVGA; // 320x240，方便縮放裁切
-    config.pixel_format = PIXFORMAT_GRAYSCALE; // 直接抓灰階照片，省內存好處理
-    config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
-    config.fb_location = CAMERA_FB_IN_PSRAM; // 相機緩衝區放在 PSRAM
-    config.jpeg_quality = 12;
-    config.fb_count = 1;
-
-    // 初始化
-    esp_err_t err = esp_camera_init(&config);
-    if (err != ESP_OK) {
-        Serial.printf("Camera init failed with error 0x%x", err);
-        return err;
-    }
-    return ESP_OK;
-}
 
 // ==========================================
 // 高品質圖片處理：Floyd-Steinberg 抖動演算法
@@ -203,9 +148,93 @@ void capture_process_display() {
     Serial.println("Update done. See the photo!");
 }
 
+// --- I2C 硬體連線測試函式 ---
+void test_camera_i2c() {
+#define CAM_SDA_PIN   15
+#define CAM_SCL_PIN   16
+#define CAM_PWDN_PIN  8
+#define CAM_XCLK_PIN  9
+    log_i("==================================");
+    log_i("    Camera I2C Hardware Scan (V2) ");
+    log_i("==================================");
+
+    // 1. 強制喚醒相機 (PWDN 設為 LOW)
+    log_i("Waking up camera (PWDN -> LOW)...");
+    pinMode(CAM_PWDN_PIN, OUTPUT);
+    digitalWrite(CAM_PWDN_PIN, LOW); 
+
+    // 2. ⚡️ 給予相機 20MHz 心跳 (XCLK)
+    log_i("Starting 20MHz XCLK on pin %d...", CAM_XCLK_PIN);
+    // 使用 ESP32 的 LEDC PWM 產生器來打出高頻時脈
+    ledcSetup(0, 20000000, 1);     // 通道0, 20MHz, 1-bit 解析度
+    ledcAttachPin(CAM_XCLK_PIN, 0); // 綁定 XCLK 腳位
+    ledcWrite(0, 1);               // 啟動輸出 (50% duty cycle)
+    delay(200); // 等待相機大腦完全開機
+
+    // 3. 啟動 I2C 匯流排
+    log_i("Initializing I2C on SDA: %d, SCL: %d", CAM_SDA_PIN, CAM_SCL_PIN);
+    Wire.begin(CAM_SDA_PIN, CAM_SCL_PIN);
+
+    byte error, address;
+    int nDevices = 0;
+
+    log_i("Scanning I2C bus...");
+
+    for(address = 1; address < 127; address++ ) {
+        Wire.beginTransmission(address);
+        error = Wire.endTransmission();
+
+        if (error == 0) {
+            log_i("✅ SUCCESS: Found OV2640 at address 0x%02X", address);
+            nDevices++;
+        } else if (error == 4) {
+            log_e("⚠️ WARNING: Unknown error at address 0x%02X", address);
+        }
+    }
+    
+    if (nDevices == 0) {
+        log_e("❌ FATAL: Still no I2C devices found!");
+        log_e("硬體檢查清單 (Hardware Checklist):");
+        log_e("1. FPC 排線是否跟電子紙一樣【插反了】？(金屬面方向對嗎？)");
+        log_e("2. 電路板是否有提供 2.8V 和 1.2V 給相機？(OV2640需要這兩種電壓)");
+        log_e("3. SDA/SCL 上的 1k 電阻是否有確實銲接？");
+        
+        // 停止系統
+        while (1) delay(100); 
+    } else {
+        log_i("Scan complete. Found %d device(s).", nDevices);
+        log_i("==================================");
+        
+        // 測試完畢後，把 LEDC 時脈關掉，把控制權還給稍後的 camera_init()
+        ledcDetachPin(CAM_XCLK_PIN);
+    }
+}
+
+void psram_init(){
+    log_i("Checking PSRAM availability...");
+    if (!psramFound()) {
+        log_e("FATAL Error: PSRAM not found!");
+        log_e("Please ensure 'build_flags = -D BOARD_HAS_PSRAM' is in platformio.ini");
+        while (1) delay(100); // 系統死循環卡在這裡，保護後續硬體不崩潰
+    }
+    log_i("PSRAM Mount SUCCESS! Size: %d MB", ESP.getPsramSize() / (1024 * 1024));
+
+    log_i("Allocating Image Buffer in PSRAM...");
+    processed_image_bw = (uint8_t *)ps_malloc(EPD_WIDTH * EPD_HEIGHT);
+    if (!processed_image_bw) {
+        log_e("FATAL Error: Failed to allocate EPD image buffer in PSRAM!");
+        while (1) delay(100); 
+    }
+    log_i("Buffer Allocated SUCCESS! Size: %d bytes", EPD_WIDTH * EPD_HEIGHT);
+    log_i("----------------------------------------");
+}
+
 void setup() {
     Serial.begin(115200);
     delay(1000);
+
+    psram_init();
+    test_camera_i2c();
 
     // Call the modular init function
     if (sd_init(SPI_SCK, TF_MISO, SPI_MOSI, TF_CS)) {
@@ -224,8 +253,15 @@ void setup() {
         log_e("Critical Error: SD subsystem failed to initialize.");
     }
 
+    // 2. Initialize Camera subsystem
+    if (camera_init()) {
+        take_test_photo();
+    } else {
+        log_e("Subsystem Warning: Camera initialization failed.");
+    }
+
 }
 
 void loop() {
-    delay(1000);
+    delay(3000);
 }

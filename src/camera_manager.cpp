@@ -10,7 +10,7 @@
 #define SIOC_GPIO_NUM     16  // CAM_SCL
 
 // Data Pins (Y9 to Y2 correspond to D7 to D0)
-#define Y9_GPIO_NUM       36  // CAM_D7
+#define Y9_GPIO_NUM       39  // CAM_D7
 #define Y8_GPIO_NUM       10  // CAM_D6
 #define Y7_GPIO_NUM       11  // CAM_D5
 #define Y6_GPIO_NUM       13  // CAM_D4

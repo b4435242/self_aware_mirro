@@ -1,4 +1,5 @@
 #include "camera_manager.h"
+#include "sd_manager.h"
 
 // ==========================================
 // OV2640 Camera Pin Definitions
@@ -10,7 +11,7 @@
 #define SIOC_GPIO_NUM     16  // CAM_SCL
 
 // Data Pins (Y9 to Y2 correspond to D7 to D0)
-#define Y9_GPIO_NUM       39  // CAM_D7
+#define Y9_GPIO_NUM       46  // CAM_D7
 #define Y8_GPIO_NUM       10  // CAM_D6
 #define Y7_GPIO_NUM       11  // CAM_D5
 #define Y6_GPIO_NUM       13  // CAM_D4
@@ -84,6 +85,8 @@ void take_test_photo() {
     log_i("Capture SUCCESS! Image size: %zu bytes", fb->len);
     log_i("Image Width: %d, Height: %d", fb->width, fb->height);
     
+    saveImageToSd(fb);
+
     // IMPORTANT: Return the frame buffer back to the driver for reuse
     esp_camera_fb_return(fb);
 }

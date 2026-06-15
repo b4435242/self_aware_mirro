@@ -69,3 +69,27 @@ void printSDCardInfo() {
     uint64_t cardSize = SD.totalBytes() / (1024 * 1024);
     log_i("SD Card Size: %llu MB", cardSize);
 }
+
+void saveImageToSd(camera_fb_t *fb) {
+    if (!fb) return;
+
+    // 開啟檔案準備寫入
+    File file = SD.open("/ghost_image.pgm", FILE_WRITE);
+    if (!file) {
+        log_e("Failed to open file for writing");
+        return;
+    }
+
+    // 寫入 PGM 檔頭 (格式：P5 \n 寬 高 \n 最大亮度 \n)
+    file.printf("P5\n%d %d\n255\n", fb->width, fb->height);
+
+    // 寫入真實影像資料 (76800 bytes)
+    size_t written = file.write(fb->buf, fb->len);
+    if (written == fb->len) {
+        log_i("Image saved successfully: /ghost_image.pgm (%d bytes)", written);
+    } else {
+        log_e("Failed to write complete image data");
+    }
+    
+    file.close();
+}

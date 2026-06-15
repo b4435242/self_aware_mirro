@@ -172,7 +172,6 @@ void setup() {
     delay(1000);
 
     psram_init();
-    test_camera_i2c();
 
     // Call the modular init function
     if (sd_init(SPI_SCK, TF_MISO, SPI_MOSI, TF_CS)) {

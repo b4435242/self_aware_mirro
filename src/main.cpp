@@ -9,25 +9,16 @@
 #include <HWCDC.h>
 #include "sd_manager.h"
 #include "camera_manager.h"
+#include "epd_manager.h"
 
 HWCDC USBSerial;
+
 
 #define SPI_SCK  5   // Shared SCK
 #define SPI_MOSI 6   // Shared MOSI
 #define TF_MISO  4   // SD Card MISO
 #define TF_CS    7   // SD Card CS
 
-// ==========================================
-// 1. 硬體定義：電子紙安全腳位 (Z19c 三色)
-// ==========================================
-const int EPD_CS   = 1;  
-const int EPD_DC   = 2;  
-const int EPD_RST  = 42; 
-const int EPD_BUSY = 14; 
-const int EPD_MOSI = 47; 
-const int EPD_SCK  = 21; 
-
-GxEPD2_3C<GxEPD2_213_Z19c, GxEPD2_213_Z19c::HEIGHT> display(GxEPD2_213_Z19c(EPD_CS, EPD_DC, EPD_RST, EPD_BUSY));
 
 // 電子紙目標尺寸 (改為直向)
 #define EPD_WIDTH  104
@@ -195,6 +186,13 @@ void setup() {
         take_test_photo();
     } else {
         log_e("Subsystem Warning: Camera initialization failed.");
+    }
+
+    if (initEpd()) {
+        log_i("✅ 電子紙模組啟動成功，開始顯示測試畫面！");
+        testHelloEpd();
+    } else {
+        log_e("❌ 電子紙模組啟動失敗，請檢查硬體連線！");
     }
 
 }

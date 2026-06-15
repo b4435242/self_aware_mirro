@@ -148,68 +148,6 @@ void capture_process_display() {
     Serial.println("Update done. See the photo!");
 }
 
-// --- I2C 硬體連線測試函式 ---
-void test_camera_i2c() {
-#define CAM_SDA_PIN   15
-#define CAM_SCL_PIN   16
-#define CAM_PWDN_PIN  8
-#define CAM_XCLK_PIN  9
-    log_i("==================================");
-    log_i("    Camera I2C Hardware Scan (V2) ");
-    log_i("==================================");
-
-    // 1. 強制喚醒相機 (PWDN 設為 LOW)
-    log_i("Waking up camera (PWDN -> LOW)...");
-    pinMode(CAM_PWDN_PIN, OUTPUT);
-    digitalWrite(CAM_PWDN_PIN, LOW); 
-
-    // 2. ⚡️ 給予相機 20MHz 心跳 (XCLK)
-    log_i("Starting 20MHz XCLK on pin %d...", CAM_XCLK_PIN);
-    // 使用 ESP32 的 LEDC PWM 產生器來打出高頻時脈
-    ledcSetup(0, 20000000, 1);     // 通道0, 20MHz, 1-bit 解析度
-    ledcAttachPin(CAM_XCLK_PIN, 0); // 綁定 XCLK 腳位
-    ledcWrite(0, 1);               // 啟動輸出 (50% duty cycle)
-    delay(200); // 等待相機大腦完全開機
-
-    // 3. 啟動 I2C 匯流排
-    log_i("Initializing I2C on SDA: %d, SCL: %d", CAM_SDA_PIN, CAM_SCL_PIN);
-    Wire.begin(CAM_SDA_PIN, CAM_SCL_PIN);
-
-    byte error, address;
-    int nDevices = 0;
-
-    log_i("Scanning I2C bus...");
-
-    for(address = 1; address < 127; address++ ) {
-        Wire.beginTransmission(address);
-        error = Wire.endTransmission();
-
-        if (error == 0) {
-            log_i("✅ SUCCESS: Found OV2640 at address 0x%02X", address);
-            nDevices++;
-        } else if (error == 4) {
-            log_e("⚠️ WARNING: Unknown error at address 0x%02X", address);
-        }
-    }
-    
-    if (nDevices == 0) {
-        log_e("❌ FATAL: Still no I2C devices found!");
-        log_e("硬體檢查清單 (Hardware Checklist):");
-        log_e("1. FPC 排線是否跟電子紙一樣【插反了】？(金屬面方向對嗎？)");
-        log_e("2. 電路板是否有提供 2.8V 和 1.2V 給相機？(OV2640需要這兩種電壓)");
-        log_e("3. SDA/SCL 上的 1k 電阻是否有確實銲接？");
-        
-        // 停止系統
-        while (1) delay(100); 
-    } else {
-        log_i("Scan complete. Found %d device(s).", nDevices);
-        log_i("==================================");
-        
-        // 測試完畢後，把 LEDC 時脈關掉，把控制權還給稍後的 camera_init()
-        ledcDetachPin(CAM_XCLK_PIN);
-    }
-}
-
 void psram_init(){
     log_i("Checking PSRAM availability...");
     if (!psramFound()) {
